@@ -18,7 +18,7 @@ class AnimatedQuran extends StatelessWidget {
       child: AnimatedTextKit(
         animatedTexts: [
           TypewriterAnimatedText(
-            'وَفِي ذَلِكَ فَلْيَتَنَافَسِ الْمُتَنَافِسُونَ',
+            '',
             textAlign: TextAlign.center,
           )
         ],

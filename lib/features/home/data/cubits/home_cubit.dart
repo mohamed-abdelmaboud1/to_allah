@@ -291,8 +291,8 @@ class HomeCubit extends Cubit<HomeCubitState> {
   // We call it only one time to initialize the Firebase Days
   Future<void> _initializeFirebaseDays() async {
     final List<DayModel> days = [];
-    final DateTime initialDate = DateTime(2024, 8, 9);
-    final DateTime lastDate = DateTime(2025, 1, 1);
+    final DateTime initialDate = DateTime(2025, 2, 25);
+    final DateTime lastDate = DateTime(2030, 1, 1);
 
     // Add the days between initial date and last date
     int dayIndex = 0;
