@@ -6,6 +6,8 @@ class HomeInitialState extends HomeCubitState {}
 
 class HomeLoadingState extends HomeCubitState {}
 
+class HomeLoadedState extends HomeCubitState {}
+
 class HomeSuccessState extends HomeCubitState {}
 
 class HomeErrorState extends HomeCubitState {

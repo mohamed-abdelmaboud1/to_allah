@@ -10,7 +10,7 @@ class ZakrTableCell extends StatelessWidget {
   Widget build(BuildContext context) {
     return const TableCell(
       child: Padding(
-        padding: EdgeInsets.all(8.0),
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8.0),
         child: Text(
           'الذكر',
           style: AppStyles.kufamStyle14,

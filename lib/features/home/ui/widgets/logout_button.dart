@@ -13,7 +13,13 @@ class LogoutButton extends StatelessWidget {
         LocalData.setIsLogin(false);
         context.go(AppRouter.login);
       },
-      child: const Text('تسجيل الخروج'),
+      child: const Text(
+        'تسجيل الخروج',
+        style: TextStyle(
+          color: Colors.red,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
     );
   }
 }

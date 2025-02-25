@@ -1,44 +1,53 @@
+import 'package:expandable_page_view/expandable_page_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
-import 'package:intl/intl.dart';
-import 'package:to_allah/core/utils/app_styles.dart';
-import 'package:to_allah/features/home/data/cubits/home_cubit.dart';
-import 'package:to_allah/features/home/ui/widgets/home_table_body.dart';
 
-class HomeTablePageView extends StatelessWidget {
+import '../../data/cubits/home_cubit.dart';
+import 'home_table_body.dart';
+import 'home_table_date.dart';
+import 'table_shimmer.dart';
+
+class HomeTablePageView extends HookWidget {
   const HomeTablePageView({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<HomeCubit, HomeCubitState>(
+    final controller = usePageController();
+    return BlocConsumer<HomeCubit, HomeCubitState>(
+      listener: (context, state) {
+        if (state is HomeLoadedState) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            controller.jumpToPage(
+              context.read<HomeCubit>().currentDayIndex,
+            );
+          });
+        }
+      },
       builder: (context, state) {
+        final cubit = context.read<HomeCubit>();
         if (state is HomeLoadingState) {
-          return const Center(
-            child: CircularProgressIndicator(),
+          return const Padding(
+            padding: EdgeInsets.all(12),
+            child: TableShimmer(),
           );
         }
-        final cubit = context.read<HomeCubit>();
 
-        return PageView.builder(
+        return ExpandablePageView.builder(
+          controller: controller,
           reverse: true,
           itemBuilder: (context, index) {
-            final date = cubit.dates[index];
-            final formattedDate = DateFormat('dd MMMM yyyy').format(date);
-
-            return Column(
+            return const Column(
               children: [
-                Text(
-                  formattedDate, // Display the date
-                  style: AppStyles.kufamStyle14,
-                ),
-                const Gap(10),
-                const HomeTableBody(),
+                HomeTableDate(),
+                Gap(10),
+                HomeTableBody(),
               ],
             );
           },
           onPageChanged: cubit.updateDayIndex,
-          itemCount: cubit.usersData.first.data.length,
+          itemCount: cubit.daysInfo.length,
         );
       },
     );

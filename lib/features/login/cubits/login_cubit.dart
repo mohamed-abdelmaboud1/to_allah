@@ -15,7 +15,7 @@ class LoginCubit extends Cubit<LoginCubitState> {
     emit(LoginLoadingState());
 
     // Get the list of users
-    final result = await FirestoreServices.getUserAuthList();
+    final result = await FirestoreServices.getUsersAuthList();
 
     result.fold(
       (failure) {

@@ -11,7 +11,7 @@ class CustomTableCell extends StatelessWidget {
   Widget build(BuildContext context) {
     return TableCell(
       child: Padding(
-        padding: const EdgeInsets.all(8.0),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
         child: Text(
           username,
           style: AppStyles.kufamStyle14,

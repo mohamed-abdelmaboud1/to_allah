@@ -1,11 +1,11 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:to_allah/features/home/data/models/user_data_model.dart';
+import 'package:to_allah/features/home/data/models/day_info.dart';
+import 'package:to_allah/features/home/data/models/user_model.dart';
+import 'package:to_allah/features/login/models/user_auth.dart';
 
 import '../../../../core/services/firestore_services.dart';
 import '../../../../core/utils/app_images.dart';
 import '../../../login/local_data/local_data.dart';
-import '../models/day_model.dart';
-import '../models/table_data_model.dart';
 import '../models/table_row_info.dart';
 
 part 'home_cubit_state.dart';
@@ -13,73 +13,99 @@ part 'home_cubit_state.dart';
 class HomeCubit extends Cubit<HomeCubitState> {
   HomeCubit() : super(HomeInitialState());
 
-  int dayIndex = 0;
-  late final String username;
-  late final List<UserDataModel> usersData;
+  String currentUsername = '';
+  final List<UserModel> users = [];
+  late int currentDayIndex;
 
-  void init() async {
+  List<UserAuth> get usersAuth => users.map((user) => user.userAuth).toList();
+  List<DayInfo> get daysInfo => users.first.daysInfo;
+  DayInfo get currentDayInfo => daysInfo[currentDayIndex];
+
+  Future<void> init() async {
     emit(HomeLoadingState());
-    _initUsername();
-    await _initUsersData();
-    _sortUsersByUsername();
-    _initializeFirebaseDays();
-    emit(HomeSuccessState());
+    _initCurrentUsername();
+    await _initUsers();
+    _initCurrentDayIndex();
+    emit(HomeLoadedState());
   }
 
   void updateDayIndex(int dayIndex) {
-    this.dayIndex = dayIndex;
-  }
-
-  // ** Edit data functions **
-  void toggleMorningAzkar({required int userIndex}) {
-    if (!_isAllowToEdit(userIndex: userIndex)) return;
-    usersData[userIndex].data[dayIndex].toggleMorningAzkar();
+    currentDayIndex = dayIndex;
     emit(HomeSuccessState());
   }
 
-  void incrementPrayInMasjid({required int userIndex}) {
-    if (!_isAllowToEdit(userIndex: userIndex)) return;
-    usersData[userIndex].data[dayIndex].incrementPrayInMasjid();
-    emit(HomeSuccessState());
+  void _initCurrentDayIndex() {
+    for (var i = 0; i < daysInfo.length; i++) {
+      final date = daysInfo[i].date;
+      final currentDate = DateTime.now();
+      if (date.day == currentDate.day &&
+          date.month == currentDate.month &&
+          date.year == currentDate.year) {
+        currentDayIndex = i;
+        break;
+      }
+    }
   }
 
-  void incrementTakberElehram({required int userIndex}) {
-    if (!_isAllowToEdit(userIndex: userIndex)) return;
-    usersData[userIndex].data[dayIndex].incrementTakberElehram();
-    emit(HomeSuccessState());
+  void _initCurrentUsername() {
+    currentUsername = LocalData.getUsername()!;
   }
 
-  void incrementSunnah({required int userIndex}) {
-    if (!_isAllowToEdit(userIndex: userIndex)) return;
-    usersData[userIndex].data[dayIndex].incrementSunnah();
-    emit(HomeSuccessState());
+  Future<void> _initUsersAuth() async {
+    final result = await FirestoreServices.getUsersAuthList();
+    result.fold(
+      (failure) => emit(HomeErrorState(failure.message)),
+      (usersAuth) {
+        for (var userAuth in usersAuth) {
+          users.add(
+            UserModel(
+              userAuth: userAuth,
+              daysInfo: [],
+            ),
+          );
+        }
+      },
+    );
   }
 
-  void togglePrayInNabi({required int userIndex}) {
-    if (!_isAllowToEdit(userIndex: userIndex)) return;
-    usersData[userIndex].data[dayIndex].togglePrayInNabi();
-    emit(HomeSuccessState());
+  Future<void> _sortUsersAuth() async {
+    for (var user in users) {
+      if (user.userAuth.username == currentUsername) {
+        users.remove(user);
+        users.insert(0, user);
+        break;
+      }
+    }
   }
 
-  void toggleQuranVerse({required int userIndex}) {
-    if (!_isAllowToEdit(userIndex: userIndex)) return;
-    usersData[userIndex].data[dayIndex].toggleQuranVerse();
-    emit(HomeSuccessState());
+  Future<void> _initDaysInfo() async {
+    for (var user in users) {
+      final result = await FirestoreServices.getDaysInfo(
+        userUid: user.userAuth.uid,
+      );
+      result.fold(
+        (failure) => emit(HomeErrorState(failure.message)),
+        (daysInfo) => user.daysInfo
+          ..clear()
+          ..addAll(daysInfo),
+      );
+    }
   }
 
-  void toggleMidnightQiam({required int userIndex}) {
-    if (!_isAllowToEdit(userIndex: userIndex)) return;
-    usersData[userIndex].data[dayIndex].toggleMidnightQiam();
-    emit(HomeSuccessState());
+  Future<void> _initUsers() async {
+    await _initUsersAuth();
+    await _sortUsersAuth();
+    await _initDaysInfo();
   }
 
-  void toggleEveningAzkar({required int userIndex}) {
-    if (!_isAllowToEdit(userIndex: userIndex)) return;
-    usersData[userIndex].data[dayIndex].toggleEveningAzkar();
-    emit(HomeSuccessState());
+  Future<void> _updateDayInfo(int userIndex) async {
+    await FirestoreServices.updateDayInfo(
+      userUid: users[userIndex].userAuth.uid,
+      dayInfo: users[userIndex].daysInfo[currentDayIndex],
+    );
   }
 
-  // ** Table Row Info **
+  // ** Morning Azkar **
   TableRowInfo getTableMorningAzkarInfo() {
     return TableRowInfo(
       title: 'اذكار الصباح',
@@ -87,48 +113,167 @@ class HomeCubit extends Cubit<HomeCubitState> {
     );
   }
 
+  List<String> getTableMorningAzkarValues() {
+    return users
+        .map((user) => user.daysInfo[currentDayIndex].morningAzkar.toString())
+        .toList();
+  }
+
+  List<Function()> getTableMorningAzkarOnTaps() {
+    return List.generate(
+      users.length,
+      (index) => () => _toggleMorningAzkar(userIndex: index),
+    );
+  }
+
+  Future<void> _toggleMorningAzkar({required int userIndex}) async {
+    if (!_isAllowToEdit(userIndex: userIndex)) return;
+    users[userIndex].daysInfo[currentDayIndex].toggleMorningAzkar();
+    await _updateDayInfo(userIndex);
+    emit(HomeSuccessState());
+  }
+
+  // ** Pray In Masjid **
   TableRowInfo getTablePrayInMasjidInfo() {
     return TableRowInfo(
-      title: 'الصلاه في المسجد',
+      title: 'الصلاة في المسجد',
       imagePath: Assets.assetsImagesPrayer,
     );
   }
 
-  TableRowInfo getTableTakberElehramInfo() {
-    return TableRowInfo(
-      title: 'ادراك تكبيره الاحرام',
-      imagePath: Assets.assetsImagesPrayer,
+  List<String> getTablePrayInMasjidValues() {
+    return users
+        .map((user) => user.daysInfo[currentDayIndex].prayInMasjid.toString())
+        .toList();
+  }
+
+  List<Function()> getTablePrayInMasjidOnTaps() {
+    return List.generate(
+      users.length,
+      (index) => () => _incrementPrayInMasjid(userIndex: index),
     );
   }
 
+  Future<void> _incrementPrayInMasjid({required int userIndex}) async {
+    if (!_isAllowToEdit(userIndex: userIndex)) return;
+    users[userIndex].daysInfo[currentDayIndex].incrementPrayInMasjid();
+    await _updateDayInfo(userIndex);
+    emit(HomeSuccessState());
+  }
+
+  // ** Sunnah **
   TableRowInfo getTableSunnahInfo() {
     return TableRowInfo(
       title: 'السنن المؤكده',
-      imagePath: Assets.assetsImagesPrayer,
-    );
-  }
-
-  TableRowInfo getTablePrayInNabiInfo() {
-    return TableRowInfo(
-      title: 'الصلاه علي النبي',
       imagePath: Assets.assetsImagesBeads,
     );
   }
 
+  List<String> getTableSunnahValues() {
+    return users
+        .map((user) => user.daysInfo[currentDayIndex].sunnah.toString())
+        .toList();
+  }
+
+  List<Function()> getTableSunnahOnTaps() {
+    return List.generate(
+      users.length,
+      (index) => () => _incrementSunnah(userIndex: index),
+    );
+  }
+
+  Future<void> _incrementSunnah({required int userIndex}) async {
+    if (!_isAllowToEdit(userIndex: userIndex)) return;
+    users[userIndex].daysInfo[currentDayIndex].incrementSunnah();
+    await _updateDayInfo(userIndex);
+    emit(HomeSuccessState());
+  }
+
+  // ** Pray In Nabi **
+  TableRowInfo getTablePrayInNabiInfo() {
+    return TableRowInfo(
+      title: 'الصلاة علي النبي',
+      imagePath: Assets.assetsImagesPrayer,
+    );
+  }
+
+  List<String> getTablePrayInNabiValues() {
+    return users
+        .map((user) => user.daysInfo[currentDayIndex].prayInNabi.toString())
+        .toList();
+  }
+
+  List<Function()> getTablePrayInNabiOnTaps() {
+    return List.generate(
+      users.length,
+      (index) => () => _togglePrayInNabi(userIndex: index),
+    );
+  }
+
+  Future<void> _togglePrayInNabi({required int userIndex}) async {
+    if (!_isAllowToEdit(userIndex: userIndex)) return;
+    users[userIndex].daysInfo[currentDayIndex].togglePrayInNabi();
+    await _updateDayInfo(userIndex);
+    emit(HomeSuccessState());
+  }
+
+  // ** Quran Verse **
   TableRowInfo getTableQuranVerseInfo() {
     return TableRowInfo(
-      title: 'ورد القران',
+      title: 'ورد القرآن',
       imagePath: Assets.assetsImagesLogo,
     );
   }
 
+  List<String> getTableQuranVerseValues() {
+    return users
+        .map((user) => user.daysInfo[currentDayIndex].quranVerse.toString())
+        .toList();
+  }
+
+  List<Function()> getTableQuranVerseOnTaps() {
+    return List.generate(
+      users.length,
+      (index) => () => _toggleQuranVerse(userIndex: index),
+    );
+  }
+
+  Future<void> _toggleQuranVerse({required int userIndex}) async {
+    if (!_isAllowToEdit(userIndex: userIndex)) return;
+    users[userIndex].daysInfo[currentDayIndex].toggleQuranVerse();
+    await _updateDayInfo(userIndex);
+    emit(HomeSuccessState());
+  }
+
+  // ** Evening Azkar **
   TableRowInfo getTableEveningAzkarInfo() {
     return TableRowInfo(
-      title: 'اذكار المساء',
+      title: 'أذكار المساء',
       imagePath: Assets.assetsImagesAzkar,
     );
   }
 
+  List<String> getTableEveningAzkarValues() {
+    return users
+        .map((user) => user.daysInfo[currentDayIndex].eveningAzkar.toString())
+        .toList();
+  }
+
+  List<Function()> getTableEveningAzkarOnTaps() {
+    return List.generate(
+      users.length,
+      (index) => () => _toggleEveningAzkar(userIndex: index),
+    );
+  }
+
+  Future<void> _toggleEveningAzkar({required int userIndex}) async {
+    if (!_isAllowToEdit(userIndex: userIndex)) return;
+    users[userIndex].daysInfo[currentDayIndex].toggleEveningAzkar();
+    await _updateDayInfo(userIndex);
+    emit(HomeSuccessState());
+  }
+
+  // ** Midnight Qiam **
   TableRowInfo getTableMidnightQiamInfo() {
     return TableRowInfo(
       title: 'قيام الليل',
@@ -136,156 +281,56 @@ class HomeCubit extends Cubit<HomeCubitState> {
     );
   }
 
-  // ** Table Values **
-  List<String> getTableMorningAzkarValues() {
-    return List.generate(
-      usersData.length,
-      (index) => usersData[index].data[dayIndex].morningAzkar.toString(),
-    );
-  }
-
-  List<String> getTablePrayInMasjidValues() {
-    return List.generate(
-      usersData.length,
-      (index) => usersData[index].data[dayIndex].prayInMasjid.toString(),
-    );
-  }
-
-  List<String> getTableTakberElehramValues() {
-    return List.generate(
-      usersData.length,
-      (index) => usersData[index].data[dayIndex].takberElehram.toString(),
-    );
-  }
-
-  List<String> getTableSunnahValues() {
-    return List.generate(
-      usersData.length,
-      (index) => usersData[index].data[dayIndex].sunnah.toString(),
-    );
-  }
-
-  List<String> getTablePrayInNabiValues() {
-    return List.generate(
-      usersData.length,
-      (index) => usersData[index].data[dayIndex].prayInNabi.toString(),
-    );
-  }
-
-  List<String> getTableQuranVerseValues() {
-    return List.generate(
-      usersData.length,
-      (index) => usersData[index].data[dayIndex].quranVerse.toString(),
-    );
-  }
-
-  List<String> getTableEveningAzkarValues() {
-    return List.generate(
-      usersData.length,
-      (index) => usersData[index].data[dayIndex].eveningAzkar.toString(),
-    );
-  }
-
   List<String> getTableMidnightQiamValues() {
-    return List.generate(
-      usersData.length,
-      (index) => usersData[index].data[dayIndex].midnightQiam.toString(),
-    );
-  }
-
-  // ** Table On Taps **
-  List<Function()> getTableMorningAzkarOnTaps() {
-    return List.generate(
-      usersData.length,
-      (index) => () => toggleMorningAzkar(userIndex: index),
-    );
-  }
-
-  List<Function()> getTablePrayInMasjidOnTaps() {
-    return List.generate(
-      usersData.length,
-      (index) => () => incrementPrayInMasjid(userIndex: index),
-    );
-  }
-
-  List<Function()> getTableTakberElehramOnTaps() {
-    return List.generate(
-      usersData.length,
-      (index) => () => incrementTakberElehram(userIndex: index),
-    );
-  }
-
-  List<Function()> getTableSunnahOnTaps() {
-    return List.generate(
-      usersData.length,
-      (index) => () => incrementSunnah(userIndex: index),
-    );
-  }
-
-  List<Function()> getTablePrayInNabiOnTaps() {
-    return List.generate(
-      usersData.length,
-      (index) => () => togglePrayInNabi(userIndex: index),
-    );
-  }
-
-  List<Function()> getTableQuranVerseOnTaps() {
-    return List.generate(
-      usersData.length,
-      (index) => () => toggleQuranVerse(userIndex: index),
-    );
-  }
-
-  List<Function()> getTableEveningAzkarOnTaps() {
-    return List.generate(
-      usersData.length,
-      (index) => () => toggleEveningAzkar(userIndex: index),
-    );
+    return users
+        .map((user) => user.daysInfo[currentDayIndex].midnightQiam.toString())
+        .toList();
   }
 
   List<Function()> getTableMidnightQiamOnTaps() {
     return List.generate(
-      usersData.length,
-      (index) => () => toggleMidnightQiam(userIndex: index),
+      users.length,
+      (index) => () => _toggleMidnightQiam(userIndex: index),
     );
   }
 
-  List<DateTime> get dates =>
-      usersData.first.data.map((dayData) => dayData.dayDate).toList();
-
-  void _initUsername() {
-    emit(HomeLoadingState());
-    username = LocalData.getUsername()!;
+  Future<void> _toggleMidnightQiam({required int userIndex}) async {
+    if (!_isAllowToEdit(userIndex: userIndex)) return;
+    users[userIndex].daysInfo[currentDayIndex].toggleMidnightQiam();
+    await _updateDayInfo(userIndex);
     emit(HomeSuccessState());
   }
 
-  Future<void> _initUsersData() async {
-    emit(HomeLoadingState());
-    final result = await FirestoreServices.getUsersData();
-    result.fold(
-      (failure) => emit(HomeErrorState(failure.message)),
-      (usersData) {
-        this.usersData = usersData;
-        emit(HomeSuccessState());
-      },
+  // ** Read Tabark **
+  TableRowInfo getTableReadTabarkInfo() {
+    return TableRowInfo(
+      title: 'سورة الملك قبل النوم',
+      imagePath: Assets.assetsImagesLogo,
     );
   }
 
-  void _sortUsersByUsername() {
-    // Search for the index of the username
-    final usernameIndex = usersData.indexWhere(
-      (user) => user.username == username,
-    );
+  List<String> getTableReadTabarkValues() {
+    return users
+        .map((user) => user.daysInfo[currentDayIndex].readTabark.toString())
+        .toList();
+  }
 
-    // Move it to the top
-    if (usernameIndex != 0) {
-      final user = usersData.removeAt(usernameIndex);
-      usersData.insert(0, user);
-    }
+  List<Function()> getTableReadTabarkOnTaps() {
+    return List.generate(
+      users.length,
+      (index) => () => _toggleReadTabark(userIndex: index),
+    );
+  }
+
+  Future<void> _toggleReadTabark({required int userIndex}) async {
+    if (!_isAllowToEdit(userIndex: userIndex)) return;
+    users[userIndex].daysInfo[currentDayIndex].toggleReadTabark();
+    await _updateDayInfo(userIndex);
+    emit(HomeSuccessState());
   }
 
   bool _isAllowToEdit({required int userIndex}) {
-    return username == usersData[userIndex].username;
+    return currentUsername == users[userIndex].userAuth.username;
   }
 
   // We call it only one time to initialize the Firebase Days
@@ -293,33 +338,27 @@ class HomeCubit extends Cubit<HomeCubitState> {
     final List<DayModel> days = [];
     final DateTime initialDate = DateTime(2025, 2, 25);
     final DateTime lastDate = DateTime(2030, 1, 1);
+  // For data entry
+  // Future<void> _insertDaysInfo() async {
+  //   final List<DayInfo> days = [];
+  //   final DateTime initialDate = DateTime(2024, 9, 7);
+  //   final DateTime lastDate = DateTime(2025, 1, 1);
 
-    // Add the days between initial date and last date
-    int dayIndex = 0;
-    late DateTime date;
-    date = initialDate;
-    while (date.isBefore(lastDate)) {
-      final dayModel = DayModel(
-        index: dayIndex,
-        date: date,
-      );
-      days.add(dayModel);
+  //   // Add the days between initial date and last date
+  //   DateTime date = initialDate;
+  //   while (date.isBefore(lastDate)) {
+  //     final dayModel = DayInfo(date: date);
+  //     days.add(dayModel);
+  //     date = date.add(const Duration(days: 1));
+  //   }
 
-      dayIndex++;
-      date = date.add(const Duration(days: 1));
-    }
-
-    // Add the days to Firestore
-    for (var user in usersData) {
-      for (var day in days) {
-        await FirestoreServices.addDayDoc(
-          username: user.username,
-          tableData: TableDataModel.initial(
-            dayIndex: day.index,
-            dayDate: day.date,
-          ),
-        );
-      }
-    }
-  }
+  //   for (var user in usersAuth) {
+  //     for (var day in days) {
+  //       await FirestoreServices.addDayInfo(
+  //         userUid: user.uid,
+  //         dayInfo: day,
+  //       );
+  //     }
+  //   }
+  // }
 }
