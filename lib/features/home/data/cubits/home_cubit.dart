@@ -334,26 +334,26 @@ class HomeCubit extends Cubit<HomeCubitState> {
   }
 
   // For data entry
-  // Future<void> _insertDaysInfo() async {
-  //   final List<DayInfo> days = [];
-  //   final DateTime initialDate = DateTime(2024, 9, 7);
-  //   final DateTime lastDate = DateTime(2025, 1, 1);
+  Future<void> _insertDaysInfo() async {
+    final List<DayInfo> days = [];
+    final DateTime initialDate = DateTime(2025, 2, 25);
+    final DateTime lastDate = DateTime(2028, 1, 1);
 
-  //   // Add the days between initial date and last date
-  //   DateTime date = initialDate;
-  //   while (date.isBefore(lastDate)) {
-  //     final dayModel = DayInfo(date: date);
-  //     days.add(dayModel);
-  //     date = date.add(const Duration(days: 1));
-  //   }
+    // Add the days between initial date and last date
+    DateTime date = initialDate;
+    while (date.isBefore(lastDate)) {
+      final dayModel = DayInfo(date: date);
+      days.add(dayModel);
+      date = date.add(const Duration(days: 1));
+    }
 
-  //   for (var user in usersAuth) {
-  //     for (var day in days) {
-  //       await FirestoreServices.addDayInfo(
-  //         userUid: user.uid,
-  //         dayInfo: day,
-  //       );
-  //     }
-  //   }
-  // }
+    for (var user in usersAuth) {
+      for (var day in days) {
+        await FirestoreServices.addDayInfo(
+          userUid: user.uid,
+          dayInfo: day,
+        );
+      }
+    }
+  }
 }
